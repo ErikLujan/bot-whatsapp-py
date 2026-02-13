@@ -5,6 +5,10 @@ from src.services import procesar_mensaje, enviar_mensaje_whatsapp
 
 app = Flask(__name__)
 
+@app.route("/")
+def home():
+    return "El Bot funciona y está listo para recibir mensajes."
+
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     # Verificación
