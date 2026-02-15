@@ -4,17 +4,14 @@ import json
 from supabase import create_client, Client
 from src.config import Config
 
-# --- INICIALIZACIÓN ---
 supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
 
-# Memoria temporal
 user_state = {}
 
 def procesar_mensaje(texto, numero):
     texto = texto.lower().strip()
     estado_actual = user_state.get(numero, "MENU")
 
-    # --- LÓGICA DEL BOT ---
     if estado_actual == "MENU":
         if "reportar" in texto or "1" == texto:
             user_state[numero] = "ESPERANDO_PROBLEMA"
@@ -32,7 +29,6 @@ def procesar_mensaje(texto, numero):
             )
 
     elif estado_actual == "ESPERANDO_PROBLEMA":
-        # Guardar en Supabase
         data = {"telefono": numero, "problema": texto, "estado": "Pendiente"}
         result = supabase.table("tickets").insert(data).execute()
         ticket_id = result.data[0]['id']
@@ -60,14 +56,11 @@ def enviar_mensaje_whatsapp(texto, numero):
     Envía el mensaje a la API Oficial de WhatsApp si hay credenciales.
     Siempre imprime en consola para debugging.
     """
-    # 1. LOG LOCAL (Para que sigas viendo en tu terminal)
     print(f"\n>> ENVIANDO A {numero}: {texto}\n")
 
-    # 2. ENVÍO REAL A META
     token = Config.WHATSAPP_TOKEN
     id_numero = Config.PHONE_NUMBER_ID
 
-    # Solo intentamos enviar si tenemos las credenciales configuradas
     if token and id_numero:
         url = f"https://graph.facebook.com/v22.0/{id_numero}/messages"
         
@@ -75,6 +68,9 @@ def enviar_mensaje_whatsapp(texto, numero):
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
+
+        if "549" in numero:
+            numero = numero.replace("549", "54")
         
         data = {
             "messaging_product": "whatsapp",
@@ -89,8 +85,6 @@ def enviar_mensaje_whatsapp(texto, numero):
             if response.status_code != 200:
                 print("❌ ERROR DETALLADO DE META:", response.text)
 
-            response.raise_for_status() # Lanza error si Meta rechaza el mensaje
-            # print("✅ Enviado a WhatsApp correctamente")
+            response.raise_for_status()
         except Exception as e:
             print(f"❌ Error enviando a Meta: {e}")
-            # Aquí podrías guardar el error en un log si quisieras
