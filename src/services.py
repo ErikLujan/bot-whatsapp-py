@@ -69,7 +69,7 @@ def enviar_mensaje_whatsapp(texto, numero):
 
     # Solo intentamos enviar si tenemos las credenciales configuradas
     if token and id_numero:
-        url = f"https://graph.facebook.com/v17.0/{id_numero}/messages"
+        url = f"https://graph.facebook.com/v22.0/{id_numero}/messages"
         
         headers = {
             "Authorization": f"Bearer {token}",
