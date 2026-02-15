@@ -85,6 +85,10 @@ def enviar_mensaje_whatsapp(texto, numero):
 
         try:
             response = requests.post(url, headers=headers, json=data)
+
+            if response.status_code != 200:
+                print("❌ ERROR DETALLADO DE META:", response.text)
+
             response.raise_for_status() # Lanza error si Meta rechaza el mensaje
             # print("✅ Enviado a WhatsApp correctamente")
         except Exception as e:
