@@ -22,14 +22,21 @@ def generar_ticket_real(cliente_numero, problema_texto):
         return 9999
 
     try:
-        datos = {"cliente": cliente_numero, "problema": problema_texto, "estado": "pendiente"}
+        datos = {
+            "telefono": cliente_numero,
+            "problema": problema_texto,
+            "estado": "pendiente"
+        }
+        
         response = supabase.table("tickets").insert(datos).execute()
         
         if response.data:
             ticket_id = response.data[0]['id']
             print(f"✅ Guardado en Supabase con ID Real: {ticket_id}")
             return ticket_id
+        
         return 9999
+
     except Exception as e:
         print(f"❌ Error guardando en Supabase: {e}")
         return 9999
