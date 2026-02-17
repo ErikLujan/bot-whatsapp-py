@@ -1,8 +1,8 @@
 # app.py
 from flask import Flask, request, jsonify
 import random
-from config import Config 
-from services import procesar_mensaje, enviar_mensaje_whatsapp, enviar_correo_ticket
+from src.config import Config 
+from src.services import procesar_mensaje, enviar_mensaje_whatsapp, enviar_correo_ticket
 
 app = Flask(__name__)
 
