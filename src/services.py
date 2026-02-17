@@ -1,5 +1,6 @@
 import requests
 import json
+import threading
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -94,45 +95,32 @@ def enviar_mensaje_whatsapp(texto, numero):
             print(f"❌ Error enviando a Meta: {e}")
 
 def enviar_correo_ticket(ticket_id, problema, telefono_cliente):
-    # DATOS DE CONFIGURACIÓN (Lo ideal es ponerlos en Render/Variables de Entorno)
-    # Tu correo (el que envía)
-    REMITENTE = os.environ.get("EMAIL_SENDER")  
-    # La contraseña de 16 letras que generaste
-    PASSWORD = os.environ.get("EMAIL_PASSWORD") 
-    # El correo del técnico (quien recibe la alerta)
-    DESTINATARIO = "correo_del_tecnico@gmail.com" 
+    def _tarea_enviar_email():
+        REMITENTE = os.environ.get("EMAIL_SENDER")
+        PASSWORD = os.environ.get("EMAIL_PASSWORD", "").replace(" ", "") 
+        DESTINATARIO = "eriklujan2005@gmail.com"
 
-    # Crear el mensaje
-    msg = MIMEMultipart()
-    msg['From'] = REMITENTE
-    msg['To'] = DESTINATARIO
-    msg['Subject'] = f"🚨 Nuevo Ticket #{ticket_id} - Soporte Biomatrix"
+        if not REMITENTE or not PASSWORD:
+            print("❌ Error: Faltan credenciales de correo.")
+            return
 
-    # Cuerpo del correo
-    cuerpo = f"""
-    Hola Equipo,
+        msg = MIMEMultipart()
+        msg['From'] = REMITENTE
+        msg['To'] = DESTINATARIO
+        msg['Subject'] = f"🚨 Nuevo Ticket #{ticket_id}"
+        
+        cuerpo = f"Ticket #{ticket_id}\nCliente: {telefono_cliente}\nProblema: {problema}"
+        msg.attach(MIMEText(cuerpo, 'plain'))
 
-    Se ha generado una nueva solicitud de soporte técnico.
-    
-    ------------------------------------------------
-    🎫 Ticket ID: {ticket_id}
-    📱 Cliente: {telefono_cliente}
-    ⚠️ Problema reportado: {problema}
-    ------------------------------------------------
+        try:
+            server = smtplib.SMTP('smtp.gmail.com', 587, timeout=15)
+            server.starttls()
+            server.login(REMITENTE, PASSWORD)
+            server.sendmail(REMITENTE, DESTINATARIO, msg.as_string())
+            server.quit()
+            print(f"✅ Correo Ticket #{ticket_id} enviado exitosamente.")
+        except Exception as e:
+            print(f"❌ Error enviando correo (Background): {e}")
 
-    Por favor, contactar al cliente a la brevedad.
-    """
-    
-    msg.attach(MIMEText(cuerpo, 'plain'))
-
-    # Conexión con el servidor de Gmail
-    try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls() # Encriptar la conexión
-        server.login(REMITENTE, PASSWORD)
-        text = msg.as_string()
-        server.sendmail(REMITENTE, DESTINATARIO, text)
-        server.quit()
-        print("✅ Correo de alerta enviado al técnico.")
-    except Exception as e:
-        print(f"❌ Error enviando correo: {e}")
+    hilo = threading.Thread(target=_tarea_enviar_email)
+    hilo.start()
