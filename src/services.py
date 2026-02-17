@@ -1,7 +1,7 @@
 import requests
 import json
 import threading
-import smtplib
+import resend
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
@@ -10,6 +10,8 @@ from supabase import create_client, Client
 from src.config import Config
 
 supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
+
+resend.api_key = os.environ.get("RESEND_API_KEY")
 
 user_state = {}
 
@@ -123,52 +125,28 @@ def enviar_mensaje_whatsapp(texto, numero):
             print(f"❌ Error enviando a Meta: {e}")
 
 def enviar_correo_ticket(ticket_id, problema, telefono_cliente):
-    print(f"📧 INICIANDO ENVÍO DE CORREO (Modo Síncrono - Puerto 587)...")
-    
-    REMITENTE = os.environ.get("EMAIL_SENDER")
-    PASSWORD = os.environ.get("EMAIL_PASSWORD", "").replace(" ", "")
-    DESTINATARIO = "eriklujan2005@gmail.com"
-
-    if not REMITENTE or not PASSWORD:
-        print("❌ Faltan credenciales.")
-        return
-
-    msg = MIMEMultipart()
-    msg['From'] = REMITENTE
-    msg['To'] = DESTINATARIO
-    msg['Subject'] = f"🚨 Ticket #{ticket_id} - Biomatrix"
-    cuerpo = f"Ticket #{ticket_id}\nCliente: {telefono_cliente}\nProblema: {problema}"
-    msg.attach(MIMEText(cuerpo, 'plain'))
-
-    try:
-        print("🔌 1. Conectando a smtp.gmail.com:587...")
-        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=30)
+    def _tarea_enviar_email():
+        print(f"📧 [Resend] Preparando envío Ticket #{ticket_id}...")
         
-        server.set_debuglevel(1) 
+        html_content = f"""
+        <h1>🚨 Nuevo Ticket de Soporte #{ticket_id}</h1>
+        <p><strong>Cliente:</strong> {telefono_cliente}</p>
+        <p><strong>Problema:</strong> {problema}</p>
+        <hr>
+        <p><em>Enviado automáticamente por Bot Biomatrix</em></p>
+        """
 
-        print("👋 2. Saludando al servidor (EHLO)...")
-        server.ehlo()
+        try:
+            r = resend.Emails.send({
+                "from": "onboarding@resend.dev",
+                "to": "eriklujan2005@gmail.com",
+                "subject": f"🚨 Ticket #{ticket_id} - Biomatrix",
+                "html": html_content
+            })
+            print(f"✅ [Resend] Correo enviado! ID: {r.get('id')}")
+            
+        except Exception as e:
+            print(f"❌ [Resend] Error: {e}")
 
-        print("🔒 3. Encriptando conexión (STARTTLS)...")
-        server.starttls()
-        
-        print("👋 4. Saludando de nuevo (EHLO encriptado)...")
-        server.ehlo()
-
-        print("🔑 5. Iniciando sesión...")
-        server.login(REMITENTE, PASSWORD)
-        
-        print("📨 6. Enviando email...")
-        server.sendmail(REMITENTE, DESTINATARIO, msg.as_string())
-        
-        print("🚪 7. Cerrando conexión...")
-        server.quit()
-        
-        print(f"✅ ¡CORREO ENVIADO EXITOSAMENTE!")
-
-    except smtplib.SMTPAuthenticationError:
-        print("❌ ERROR DE PASSWORD: Google rechazó la contraseña.")
-    except smtplib.SMTPConnectError:
-        print("❌ ERROR DE CONEXIÓN: El servidor rechazó la conexión.")
-    except Exception as e:
-        print(f"❌ ERROR GENERAL: {e}")
+    hilo = threading.Thread(target=_tarea_enviar_email)
+    hilo.start()
