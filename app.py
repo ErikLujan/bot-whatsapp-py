@@ -1,8 +1,7 @@
 # app.py
 from flask import Flask, request, jsonify
-import random
 from src.config import Config 
-from src.services import procesar_mensaje, enviar_mensaje_whatsapp, enviar_correo_ticket, generar_ticket_real
+from src.services import procesar_mensaje, enviar_mensaje_whatsapp
 
 app = Flask(__name__)
 
@@ -32,20 +31,10 @@ def webhook():
                 
                 texto = message.get("text", {}).get("body", "").lower()
                 
-                if "soporte" in texto or "ayuda" in texto or "humano" in texto:
-                    ticket_id = generar_ticket_real(numero, texto)
-                    
-                    mensaje_cliente = f"✅ Ticket #{ticket_id} generado.\n\nUn técnico humano ha sido notificado y revisará tu caso. Te contactaremos a la brevedad."
-                    enviar_mensaje_whatsapp(mensaje_cliente, numero)
-                    
-                    print(f">> Generando alerta de correo para Ticket #{ticket_id}...")
-                    enviar_correo_ticket(ticket_id, texto, numero)
-
-                else:
-                    respuesta_texto = procesar_mensaje(texto, numero)
-                    
-                    if respuesta_texto:
-                        enviar_mensaje_whatsapp(respuesta_texto, numero)
+                respuesta_texto = procesar_mensaje(texto, numero)
+                
+                if respuesta_texto:
+                    enviar_mensaje_whatsapp(respuesta_texto, numero)
 
             return jsonify({"status": "success"}), 200
 
