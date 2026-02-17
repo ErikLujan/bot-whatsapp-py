@@ -123,41 +123,52 @@ def enviar_mensaje_whatsapp(texto, numero):
             print(f"❌ Error enviando a Meta: {e}")
 
 def enviar_correo_ticket(ticket_id, problema, telefono_cliente):
-    def _tarea_enviar_email():
-        print(f"📧 [Hilo Email] Iniciando proceso para Ticket #{ticket_id}...")
+    print(f"📧 INICIANDO ENVÍO DE CORREO (Modo Síncrono - Puerto 587)...")
+    
+    REMITENTE = os.environ.get("EMAIL_SENDER")
+    PASSWORD = os.environ.get("EMAIL_PASSWORD", "").replace(" ", "")
+    DESTINATARIO = "eriklujan2005@gmail.com"
+
+    if not REMITENTE or not PASSWORD:
+        print("❌ Faltan credenciales.")
+        return
+
+    msg = MIMEMultipart()
+    msg['From'] = REMITENTE
+    msg['To'] = DESTINATARIO
+    msg['Subject'] = f"🚨 Ticket #{ticket_id} - Biomatrix"
+    cuerpo = f"Ticket #{ticket_id}\nCliente: {telefono_cliente}\nProblema: {problema}"
+    msg.attach(MIMEText(cuerpo, 'plain'))
+
+    try:
+        print("🔌 1. Conectando a smtp.gmail.com:587...")
+        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=30)
         
-        REMITENTE = os.environ.get("EMAIL_SENDER")
-        PASSWORD = os.environ.get("EMAIL_PASSWORD", "").replace(" ", "")
-        DESTINATARIO = "eriklujan2005@gmail.com"
+        server.set_debuglevel(1) 
 
-        if not REMITENTE or not PASSWORD:
-            print("❌ [Hilo Email] Faltan variables EMAIL_SENDER o EMAIL_PASSWORD en Render.")
-            return
+        print("👋 2. Saludando al servidor (EHLO)...")
+        server.ehlo()
 
-        msg = MIMEMultipart()
-        msg['From'] = REMITENTE
-        msg['To'] = DESTINATARIO
-        msg['Subject'] = f"🚨 Nuevo Ticket #{ticket_id} - Biomatrix"
-        cuerpo = f"Ticket #{ticket_id}\nCliente: {telefono_cliente}\nProblema: {problema}"
-        msg.attach(MIMEText(cuerpo, 'plain'))
+        print("🔒 3. Encriptando conexión (STARTTLS)...")
+        server.starttls()
+        
+        print("👋 4. Saludando de nuevo (EHLO encriptado)...")
+        server.ehlo()
 
-        try:
-            print("🔌 [Hilo Email] Conectando a Gmail (SSL)...")
-            server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=20)
-            
-            print("🔑 [Hilo Email] Iniciando sesión...")
-            server.login(REMITENTE, PASSWORD)
-            
-            print("📨 [Hilo Email] Enviando datos...")
-            server.sendmail(REMITENTE, DESTINATARIO, msg.as_string())
-            
-            server.quit()
-            print(f"✅ [Hilo Email] ¡CORREO ENVIADO CON ÉXITO! 🚀")
-            
-        except smtplib.SMTPAuthenticationError:
-            print("❌ [Hilo Email] Error de Contraseña: Google rechazó tus credenciales. Revisa la contraseña de aplicación.")
-        except Exception as e:
-            print(f"❌ [Hilo Email] Error fatal enviando correo: {e}")
+        print("🔑 5. Iniciando sesión...")
+        server.login(REMITENTE, PASSWORD)
+        
+        print("📨 6. Enviando email...")
+        server.sendmail(REMITENTE, DESTINATARIO, msg.as_string())
+        
+        print("🚪 7. Cerrando conexión...")
+        server.quit()
+        
+        print(f"✅ ¡CORREO ENVIADO EXITOSAMENTE!")
 
-    hilo = threading.Thread(target=_tarea_enviar_email)
-    hilo.start()
+    except smtplib.SMTPAuthenticationError:
+        print("❌ ERROR DE PASSWORD: Google rechazó la contraseña.")
+    except smtplib.SMTPConnectError:
+        print("❌ ERROR DE CONEXIÓN: El servidor rechazó la conexión.")
+    except Exception as e:
+        print(f"❌ ERROR GENERAL: {e}")
