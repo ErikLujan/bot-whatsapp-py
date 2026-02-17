@@ -1,5 +1,9 @@
 import requests
 import json
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import os
 
 from supabase import create_client, Client
 from src.config import Config
@@ -88,3 +92,47 @@ def enviar_mensaje_whatsapp(texto, numero):
             response.raise_for_status()
         except Exception as e:
             print(f"❌ Error enviando a Meta: {e}")
+
+def enviar_correo_ticket(ticket_id, problema, telefono_cliente):
+    # DATOS DE CONFIGURACIÓN (Lo ideal es ponerlos en Render/Variables de Entorno)
+    # Tu correo (el que envía)
+    REMITENTE = os.environ.get("EMAIL_SENDER")  
+    # La contraseña de 16 letras que generaste
+    PASSWORD = os.environ.get("EMAIL_PASSWORD") 
+    # El correo del técnico (quien recibe la alerta)
+    DESTINATARIO = "correo_del_tecnico@gmail.com" 
+
+    # Crear el mensaje
+    msg = MIMEMultipart()
+    msg['From'] = REMITENTE
+    msg['To'] = DESTINATARIO
+    msg['Subject'] = f"🚨 Nuevo Ticket #{ticket_id} - Soporte Biomatrix"
+
+    # Cuerpo del correo
+    cuerpo = f"""
+    Hola Equipo,
+
+    Se ha generado una nueva solicitud de soporte técnico.
+    
+    ------------------------------------------------
+    🎫 Ticket ID: {ticket_id}
+    📱 Cliente: {telefono_cliente}
+    ⚠️ Problema reportado: {problema}
+    ------------------------------------------------
+
+    Por favor, contactar al cliente a la brevedad.
+    """
+    
+    msg.attach(MIMEText(cuerpo, 'plain'))
+
+    # Conexión con el servidor de Gmail
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls() # Encriptar la conexión
+        server.login(REMITENTE, PASSWORD)
+        text = msg.as_string()
+        server.sendmail(REMITENTE, DESTINATARIO, text)
+        server.quit()
+        print("✅ Correo de alerta enviado al técnico.")
+    except Exception as e:
+        print(f"❌ Error enviando correo: {e}")
