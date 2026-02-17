@@ -13,6 +13,27 @@ supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
 
 user_state = {}
 
+def generar_ticket_real(cliente_numero, problema_texto):
+    """Guarda en Supabase y devuelve el ID. Si falla, devuelve uno fake."""
+    print(f"💾 Intentando guardar ticket en Supabase...")
+    
+    if not supabase:
+        print("⚠️ AVISO: No hay credenciales de Supabase. Usando ID temporal 9999.")
+        return 9999
+
+    try:
+        datos = {"cliente": cliente_numero, "problema": problema_texto, "estado": "pendiente"}
+        response = supabase.table("tickets").insert(datos).execute()
+        
+        if response.data:
+            ticket_id = response.data[0]['id']
+            print(f"✅ Guardado en Supabase con ID Real: {ticket_id}")
+            return ticket_id
+        return 9999
+    except Exception as e:
+        print(f"❌ Error guardando en Supabase: {e}")
+        return 9999
+
 def procesar_mensaje(texto, numero):
     texto = texto.lower().strip()
     estado_actual = user_state.get(numero, "MENU")
@@ -96,31 +117,40 @@ def enviar_mensaje_whatsapp(texto, numero):
 
 def enviar_correo_ticket(ticket_id, problema, telefono_cliente):
     def _tarea_enviar_email():
+        print(f"📧 [Hilo Email] Iniciando proceso para Ticket #{ticket_id}...")
+        
         REMITENTE = os.environ.get("EMAIL_SENDER")
-        PASSWORD = os.environ.get("EMAIL_PASSWORD", "").replace(" ", "") 
+        PASSWORD = os.environ.get("EMAIL_PASSWORD", "").replace(" ", "")
         DESTINATARIO = "eriklujan2005@gmail.com"
 
         if not REMITENTE or not PASSWORD:
-            print("❌ Error: Faltan credenciales de correo.")
+            print("❌ [Hilo Email] Faltan variables EMAIL_SENDER o EMAIL_PASSWORD en Render.")
             return
 
         msg = MIMEMultipart()
         msg['From'] = REMITENTE
         msg['To'] = DESTINATARIO
-        msg['Subject'] = f"🚨 Nuevo Ticket #{ticket_id}"
-        
+        msg['Subject'] = f"🚨 Nuevo Ticket #{ticket_id} - Biomatrix"
         cuerpo = f"Ticket #{ticket_id}\nCliente: {telefono_cliente}\nProblema: {problema}"
         msg.attach(MIMEText(cuerpo, 'plain'))
 
         try:
-            server = smtplib.SMTP('smtp.gmail.com', 587, timeout=15)
-            server.starttls()
+            print("🔌 [Hilo Email] Conectando a Gmail (SSL)...")
+            server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=20)
+            
+            print("🔑 [Hilo Email] Iniciando sesión...")
             server.login(REMITENTE, PASSWORD)
+            
+            print("📨 [Hilo Email] Enviando datos...")
             server.sendmail(REMITENTE, DESTINATARIO, msg.as_string())
+            
             server.quit()
-            print(f"✅ Correo Ticket #{ticket_id} enviado exitosamente.")
+            print(f"✅ [Hilo Email] ¡CORREO ENVIADO CON ÉXITO! 🚀")
+            
+        except smtplib.SMTPAuthenticationError:
+            print("❌ [Hilo Email] Error de Contraseña: Google rechazó tus credenciales. Revisa la contraseña de aplicación.")
         except Exception as e:
-            print(f"❌ Error enviando correo (Background): {e}")
+            print(f"❌ [Hilo Email] Error fatal enviando correo: {e}")
 
     hilo = threading.Thread(target=_tarea_enviar_email)
     hilo.start()
