@@ -2,40 +2,39 @@ import requests
 import json
 import threading
 import resend
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
 
 from supabase import create_client, Client
 from src.config import Config
+from src.mensajes import MENSAJES
 
-# 1. Configuración de Clientes
 supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
 resend.api_key = os.environ.get("RESEND_API_KEY")
 
-# 2. Estado de memoria (Para saber si el usuario está en el menú o escribiendo un problema)
 user_state = {}
 
 def enviar_correo_ticket(ticket_id, problema, telefono_cliente):
-    """
-    Envía el correo usando Resend en un hilo separado (background)
-    para no bloquear la respuesta de WhatsApp.
-    """
+    '''
+    Summary: Prepara y despacha un correo electrónico notificando la creación de un ticket mediante la API de Resend utilizando un hilo secundario.
+    Parameters: 
+        ticket_id (int): El identificador numérico único del ticket en la base de datos.
+        problema (str): La descripción del inconveniente técnico provista por el usuario.
+        telefono_cliente (str): El número de teléfono desde el cual el usuario se comunicó.
+    Return: None
+    '''
     def _tarea_enviar_email():
         print(f"📧 [Resend] Preparando envío Ticket #{ticket_id}...")
         
-        html_content = f"""
-        <h1>🚨 Nuevo Ticket de Soporte #{ticket_id}</h1>
-        <p><strong>Cliente:</strong> {telefono_cliente}</p>
-        <p><strong>Problema:</strong> {problema}</p>
-        <hr>
-        <p><em>Enviado automáticamente por Bot Biomatrix</em></p>
-        """
+        html_content = MENSAJES["email_html"].format(
+            ticket_id=ticket_id, 
+            telefono_cliente=telefono_cliente, 
+            problema=problema
+        )
 
         try:
             r = resend.Emails.send({
                 "from": "onboarding@resend.dev",
-                "to": "eriklujan2005@gmail.com", # <--- TU CORREO
+                "to": "eriklujan2005@gmail.com",
                 "subject": f"🚨 Ticket #{ticket_id} - Biomatrix",
                 "html": html_content
             })
@@ -44,58 +43,49 @@ def enviar_correo_ticket(ticket_id, problema, telefono_cliente):
         except Exception as e:
             print(f"❌ [Resend] Error: {e}")
 
-    # Lanzamos el hilo
     hilo = threading.Thread(target=_tarea_enviar_email)
     hilo.start()
 
 def procesar_mensaje(texto, numero):
-    """
-    Cerebro del Bot: Maneja el menú y los estados de conversación.
-    """
+    '''
+    Summary: Evalúa el texto ingresado por el usuario, gestiona el estado de la conversación y ejecuta operaciones en la base de datos según la etapa del menú.
+    Parameters:
+        texto (str): El contenido del mensaje enviado por el usuario.
+        numero (str): El número telefónico que identifica de forma única al usuario.
+    Return: str - El texto de respuesta que el bot enviará de vuelta al usuario por WhatsApp.
+    '''
     texto = texto.lower().strip()
     estado_actual = user_state.get(numero, "MENU")
 
-    # --- ESTADO 1: MENÚ PRINCIPAL ---
     if estado_actual == "MENU":
         if "reportar" in texto or "1" == texto:
             user_state[numero] = "ESPERANDO_PROBLEMA"
-            return "🛠️ *Nuevo Ticket*\nPor favor, describí tu problema en un solo mensaje."
+            return MENSAJES["pedir_problema"]
         
         elif "estado" in texto or "2" == texto:
             user_state[numero] = "ESPERANDO_ID"
-            return "🔍 *Consultar Estado*\nEscribí el número de ID de tu ticket."
+            return MENSAJES["pedir_id"]
             
         else:
-            return (
-                "🤖 *Soporte Técnico Biomatrix*\n\n"
-                "1️⃣ Reportar problema\n"
-                "2️⃣ Consultar estado\n\n"
-                "Responde con el número de la opción."
-            )
+            return MENSAJES["bienvenida"]
 
-    # --- ESTADO 2: CREANDO TICKET (Aquí estaba el detalle) ---
     elif estado_actual == "ESPERANDO_PROBLEMA":
         try:
-            # A. Guardar en Supabase
             data = {"telefono": numero, "problema": texto, "estado": "Pendiente"}
             result = supabase.table("tickets").insert(data).execute()
             
-            # B. Obtener ID generado
             ticket_id = result.data[0]['id']
             
-            # C. ¡ENVIAR EL CORREO! (Esto es lo que agregué) 🚀
             enviar_correo_ticket(ticket_id, texto, numero)
 
-            # D. Resetear estado y confirmar
             user_state[numero] = "MENU"
-            return f"✅ Ticket #{ticket_id} creado correctamente.\nUn técnico ha sido notificado."
+            return MENSAJES["ticket_creado"].format(ticket_id=ticket_id)
             
         except Exception as e:
             print(f"❌ Error creando ticket: {e}")
             user_state[numero] = "MENU"
-            return "❌ Hubo un error guardando tu ticket. Intenta de nuevo."
+            return MENSAJES["error_ticket"]
 
-    # --- ESTADO 3: CONSULTANDO ESTADO ---
     elif estado_actual == "ESPERANDO_ID":
         if texto.isdigit():
             response = supabase.table("tickets").select("*").eq("id", int(texto)).execute()
@@ -103,18 +93,26 @@ def procesar_mensaje(texto, numero):
             
             if response.data:
                 ticket = response.data[0]
-                return f"🎫 Ticket #{ticket['id']}\nEstado: *{ticket['estado']}*\nProblema: {ticket['problema']}"
+                return MENSAJES["estado_ticket"].format(
+                    ticket_id=ticket['id'],
+                    estado=ticket['estado'],
+                    problema=ticket['problema']
+                )
             else:
-                return "❌ No encontré un ticket con ese número."
+                return MENSAJES["ticket_no_encontrado"]
         else:
-            return "⚠️ Por favor, enviá solo el número del ticket (ej: 12)."
+            return MENSAJES["formato_invalido"]
             
-    return "No entendí."
+    return MENSAJES["no_entendido"]
 
 def enviar_mensaje_whatsapp(texto, numero):
-    """
-    Envía la respuesta a WhatsApp.
-    """
+    '''
+    Summary: Estructura el JSON requerido por la API de Meta y realiza una petición POST HTTP para enviar el mensaje final al cliente.
+    Parameters:
+        texto (str): El mensaje definitivo formateado que leerá el usuario.
+        numero (str): El número de teléfono destinatario del mensaje.
+    Return: None
+    '''
     print(f"\n>> ENVIANDO A {numero}: {texto}\n")
 
     token = Config.WHATSAPP_TOKEN
@@ -128,7 +126,6 @@ def enviar_mensaje_whatsapp(texto, numero):
             "Content-Type": "application/json"
         }
 
-        # Corrección para Argentina (Solo si es necesario para la API de prueba)
         if "549" in numero:
             numero = numero.replace("549", "54")
         

@@ -1,4 +1,3 @@
-# app.py
 from flask import Flask, request, jsonify
 from src.config import Config 
 from src.services import procesar_mensaje, enviar_mensaje_whatsapp
@@ -7,10 +6,20 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
+    '''
+    Summary: Endpoint de prueba o "Health Check" para verificar desde el navegador que el servidor esté activo y corriendo.
+    Parameters: Ninguno.
+    Return: str - Un mensaje de texto simple indicando el estado del bot.
+    '''
     return "El Bot de Biomatrix está VIVO 🤖 y listo para recibir mensajes."
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
+    '''
+    Summary: Endpoint principal que actúa como Webhook para la API de WhatsApp Cloud. Maneja tanto la verificación inicial de Meta (GET) como la recepción estructurada de nuevos mensajes (POST), delegando la toma de decisiones al módulo de servicios.
+    Parameters: Ninguno.
+    Return: tuple - Una respuesta de confirmación para Meta (texto plano para GET o un objeto JSON para POST) acompañada de un código de estado HTTP (200 o 403).
+    '''
     if request.method == "GET":
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
