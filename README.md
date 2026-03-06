@@ -1,35 +1,85 @@
 # WhatsApp Technical Support Bot
 
-Este proyecto es un Bot de Asistencia Técnica Automatizado diseñado para gestionar tickets de soporte a través de la API oficial de WhatsApp (Meta). Implementa una arquitectura limpia (MVC) y escalable, permitiendo a los usuarios reportar problemas de hardware/software y consultar el estado de sus reclamos en tiempo real.
+Bot de soporte técnico automatizado integrado con la API oficial de WhatsApp (Meta). Permite a los clientes reportar problemas de hardware o software directamente desde WhatsApp, genera un ticket en base de datos y notifica al equipo técnico por email de forma asíncrona.
 
-El sistema utiliza una máquina de estados en memoria para gestionar el contexto conversacional del usuario, e integra notificaciones asíncronas para el equipo de soporte técnico.
+## Stack
 
-## Características Principales
+- **Flask** — framework web y manejo del webhook
+- **PostgreSQL (Supabase)** — persistencia de tickets
+- **WhatsApp Cloud API (Meta)** — canal de comunicación con el cliente
+- **Resend API** — envío transaccional de correos al equipo técnico
+- **Gunicorn** — servidor WSGI para producción
+- **Render** — deploy en la nube
 
-* **Flujo Conversacional Inteligente:** Detección de intención y gestión de contexto mediante estados (Menú Principal, Esperando Descripción, Consultando ID).
-* **Gestión de Tickets (CRUD):** * Generación automática de IDs únicos y persistencia en base de datos PostgreSQL.
-  * Consulta en tiempo real del estado de reparación por parte del cliente.
-* **Alertas Asíncronas (Multithreading):** Notificación inmediata vía email al equipo técnico cada vez que se genera un ticket, ejecutada en un hilo secundario (`threading`) para garantizar tiempos de respuesta óptimos (sub-segundo) en el webhook de Meta.
-* **Arquitectura Clean Code:** Separación estricta de responsabilidades:
-  * `app.py`: Controlador de rutas y webhook.
-  * `services.py`: Lógica de negocio, integración de APIs y conexión a base de datos.
-  * `mensajes.py`: Diccionario centralizado de copies y plantillas HTML para correos.
-* **Modo Híbrido:** Preparado para funcionar en entorno de desarrollo local y en servidores cloud de producción.
+## Cómo funciona
 
-## Stack Tecnológico
+El bot gestiona el contexto de cada conversación mediante una máquina de estados en memoria. Cada usuario tiene un estado asociado que determina qué acción ejecutar según el mensaje recibido:
 
-* **Lenguaje:** Python 3.10+
-* **Framework Web:** Flask
-* **Base de Datos:** Supabase (PostgreSQL)
-* **APIs Externas:** 
-  * WhatsApp Cloud API (Meta) - Canal de comunicación frontend.
-  * Resend API - Despacho transaccional de correos electrónicos.
-* **Infraestructura & Herramientas:** Render (Deploy), Postman, Gunicorn, Threading.
+- **Menú principal** — el cliente elige entre reportar un problema o consultar un ticket existente.
+- **Esperando descripción** — el cliente describe el problema y el sistema genera un ticket con ID único persistido en base de datos.
+- **Consultando ID** — el cliente ingresa su ID de ticket y recibe el estado actual de su reparación en tiempo real.
 
-## Instalación y Configuración Local
+Cada vez que se crea un ticket, se dispara una notificación por email al encargado del local en un hilo secundario (`threading`), lo que garantiza que el webhook de Meta responda en menos de un segundo sin bloquearse esperando el envío del correo.
 
-1. Clonar el repositorio.
-2. Crear un entorno virtual: `python -m venv venv`
-3. Instalar dependencias: `pip install -r requirements.txt`
-4. Crear un archivo `.env` en la raíz (ver `.env.example` para las variables requeridas).
-5. Ejecutar la aplicación: `python app.py`
+## Estructura del proyecto
+
+```
+├── app.py          # Controlador de rutas y webhook
+├── services.py     # Lógica de negocio, integración con APIs y base de datos
+├── mensajes.py     # Textos del bot y plantillas HTML para los correos
+├── .env.example
+└── requirements.txt
+```
+
+## Instalación
+
+```bash
+# Clonar el repositorio
+git clone https://github.com/TU_USUARIO/whatsapp-support-bot.git
+cd whatsapp-support-bot
+
+# Crear y activar el entorno virtual
+python -m venv venv
+venv\Scripts\activate  # Windows
+source venv/bin/activate  # Linux/Mac
+
+# Instalar dependencias
+pip install -r requirements.txt
+```
+
+### Variables de entorno
+
+Creá un archivo `.env` en la raíz basándote en `.env.example`. Las variables necesarias son:
+
+```env
+# WhatsApp Cloud API
+WHATSAPP_TOKEN=tu_token_de_acceso
+WHATSAPP_PHONE_ID=id_del_numero_de_telefono
+VERIFY_TOKEN=token_de_verificacion_del_webhook
+
+# Supabase
+SUPABASE_URL=url_del_proyecto
+SUPABASE_KEY=anon_key
+
+# Resend
+RESEND_API_KEY=tu_api_key
+SUPPORT_EMAIL=email_del_encargado
+```
+
+### Ejecutar en desarrollo
+
+```bash
+python app.py
+```
+
+Para recibir mensajes de WhatsApp en local necesitás exponer el servidor con una herramienta como [ngrok](https://ngrok.com/) y configurar la URL del webhook en el panel de Meta.
+
+## Deploy
+
+El proyecto está configurado para Render usando Gunicorn como servidor de producción. En Render configurá el **Start Command** como:
+
+```bash
+gunicorn app:app
+```
+
+Y cargá todas las variables del `.env` desde el panel **Environment** del servicio.
